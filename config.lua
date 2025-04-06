@@ -347,7 +347,6 @@ local function get_nginx_command_path()
     local path = ''
     -- 获取当前 Lua 脚本的文件路径
     local script_path = debug.getinfo(1, "S").source:sub(2)
-    -- 获取 OpenResty 安装目录（假设 OpenResty 在 "/usr/local/openresty" 目录下）
     local openresty_path = script_path:match("(.*/openresty/)")
     if openresty_path then
         path = openresty_path .. 'nginx/sbin/'
@@ -360,21 +359,39 @@ local function is_linux()
     return ffi.os == "Linux"
 end
 
--- 重新加载nginx配置
-function _M.reload_nginx()
-    -- Nginx重新加载配置文件的系统命令
-    local command = get_nginx_command_path() .. "nginx -s reload"
-    if is_linux() then
-        command = "sudo " .. command
-    end
+-- -- 重新加载nginx配置
+-- function _M.reload_nginx()
+--     -- Nginx重新加载配置文件的系统命令
+--     local command = get_nginx_command_path() .. "nginx -s reload"
+--     if is_linux() then
+--         command =  command
+--     end
+--     ngx.log(ngx.ERR, "now command: " .. command)
+--     local success = os.execute(command)
+--     if success then
+--         ngx.log(ngx.INFO, "nginx configuration has been successfully reloaded.")
+--     else
+--         ngx.log(ngx.ERR, "failed to reload Nginx configuration.")
+--     end
+-- end
 
-    local success = os.execute(command)
-    if success then
-        ngx.log(ngx.INFO, "nginx configuration has been successfully reloaded.")
+
+-- 重新加载nginx配置，适应docker的设置，因为在docker中，nginx没办法发送信号
+function _M.reload_nginx()
+    -- 使用Docker环境中更安全的方式重载配置
+    -- 创建一个reload文件，让外部脚本检测并执行重载
+    local reload_file = "/usr/local/openresty/nginx/logs/reload"
+    local file, err = io.open(reload_file, "w")
+    if file then
+        file:write(os.time())
+        file:close()
+        ngx.log(ngx.INFO, "Created reload signal file: " .. reload_file)
+        return true
     else
-        ngx.log(ngx.ERR, "failed to reload Nginx configuration.")
+        ngx.log(ngx.ERR, "Failed to create reload signal file: " .. err)
+        return false
     end
-end
+end 
 
 -- 如果配置文件正确，则重载nginx
 function _M.reload_config_file()
